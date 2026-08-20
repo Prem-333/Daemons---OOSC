@@ -1,0 +1,113 @@
+/* Guardrail Tester Layout */
+.guardrail-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.guardrail-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.guardrail-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.guardrail-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.probes-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.probes-table th {
+  padding: 1rem 1.5rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+  letter-spacing: 0.05em;
+}
+
+.probes-table td {
+  padding: 1.25rem 1.5rem;
+  font-size: 0.875rem;
+  color: var(--color-text-main);
+  border-bottom: 1px solid var(--color-border-light);
+  font-weight: 500;
+}
+
+.probes-table tr:last-child td {
+  border-bottom: none;
+}
+
+.code-badge {
+  background-color: var(--color-bg-hover);
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-family: 'Space Mono', monospace;
+  font-size: 0.8125rem;
+  color: var(--color-text-main);
+  border: 1px solid var(--color-border);
+}
+
+.result-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.result-pass {
+  background-color: var(--color-bg-hover);
+  color: var(--color-text-muted);
+}
+
+.result-fail {
+  background-color: var(--color-accent-light);
+  color: #6b21a8;
+}
+
+.info-alert {
+  display: flex;
+  gap: 1rem;
+  background-color: #f0fdfa; /* Light teal */
+  border: 1px solid #ccfbf1;
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  margin-top: 1.5rem;
+}
+
+.info-alert-icon {
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.info-alert-title {
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--color-text-main);
+  margin-bottom: 0.25rem;
+}
+
+.info-alert-desc {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
