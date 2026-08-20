@@ -1,0 +1,9 @@
+langchain-core>=0.3
+langgraph>=0.2
+pydantic>=2.7
+
+[dev]
+pytest>=8
+
+[gemini]
+langchain-google-genai>=2.0

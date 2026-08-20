@@ -1,0 +1,35 @@
+Metadata-Version: 2.4
+Name: agent-reliability-engine
+Version: 0.1.0
+Summary: LangGraph-based CI-style reliability evaluation for AI agents.
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: langchain-core>=0.3
+Requires-Dist: langgraph>=0.2
+Requires-Dist: pydantic>=2.7
+Provides-Extra: gemini
+Requires-Dist: langchain-google-genai>=2.0; extra == "gemini"
+Provides-Extra: dev
+Requires-Dist: pytest>=8; extra == "dev"
+
+# AI Agent Evaluation and Reliability Engine
+
+An evaluation pipeline for autonomous agents, built with LangGraph. It generates realistic and adversarial scenarios, executes an agent against mocked tools, labels failures, probes destructive-action guardrails, and stores a regression-aware reliability scorecard.
+
+## Quick start
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e '.[dev]'
+.venv/bin/python -m reliability_engine.demo --n-per-type 3
+```
+
+The default run is offline and deterministic. To use Gemini for scenario generation, failure classification, and the sample ReAct agent:
+
+```bash
+uv sync --extra gemini
+export GOOGLE_API_KEY=...
+uv run python -m reliability_engine.demo
+```
+
+The agent under test implements `AgentAdapter`, making it straightforward to replace `SampleSupportAgent` with an existing LangGraph or LangChain agent.

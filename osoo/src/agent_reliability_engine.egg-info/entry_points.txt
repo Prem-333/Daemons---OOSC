@@ -1,0 +1,2 @@
+[console_scripts]
+agent-reliability-demo = reliability_engine.demo:main
