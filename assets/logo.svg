@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <!-- Stylized Hexagon AI Reliability Logo -->
-  <path d="M50 15 L80 32 L80 68 L50 85 L20 68 L20 32 Z" fill="none" stroke="#334155" stroke-width="8" stroke-linejoin="round" />
-  <path d="M40 70 L50 85 L85 30" fill="none" stroke="#334155" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
-  <path d="M50 15 L25 55" fill="none" stroke="#334155" stroke-width="8" stroke-linecap="round" />
-  <path d="M40 35 L60 35 L50 15 Z" fill="none" stroke="#334155" stroke-width="6" stroke-linejoin="round" />
-</svg>
