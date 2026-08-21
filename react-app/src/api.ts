@@ -44,7 +44,11 @@ export const agentApi = {
     request<Agent>('/agents/import', { method: 'POST', body: JSON.stringify({ folder, description, domain }) }),
   evaluate: (id: string, scenariosPerType = 2) =>
     request<Run>(`/agents/${id}/evaluate`, { method: 'POST', body: JSON.stringify({ scenarios_per_type: scenariosPerType }) }),
+  generateScenarios: (id: string, scenariosPerType = 2) =>
+    request<Scenario[]>(`/agents/${id}/scenarios`, { method: 'POST', body: JSON.stringify({ scenarios_per_type: scenariosPerType }) }),
 };
+
+export type Scenario = { id: string; type: string; title: string; user_message: string; success_criteria: string; tags: string[] };
 
 export const dashboardApi = {
   get: () => request<{ agents: Agent[]; recent_runs: Run[]; failure_breakdown: Record<string, number>; summary: { registered_agents: number; evaluated_agents: number; average_reliability: number | null } }>('/dashboard'),
@@ -54,4 +58,10 @@ export const providerApi = {
   geminiStatus: () => request<{ configured: boolean; model: string; package_installed: boolean }>('/providers/gemini'),
   configureGemini: (apiKey: string, model: string) =>
     request<{ configured: boolean; model: string; package_installed: boolean }>('/providers/gemini', { method: 'PUT', body: JSON.stringify({ api_key: apiKey, model }) }),
+};
+
+export const analysisApi = {
+  failures: () => request<{ total_failures: number; modes: Record<string, { count: number; incidents: { run_id: string; agent_name: string; scenario_id: string; rationale: string }[] }> }>('/analysis/failures'),
+  guardrails: () => request<{ run_id: string; agent_name: string; tool_flagged: string; pressure_technique: string; verdict: string; rationale: string }[]>('/analysis/guardrails'),
+  regressions: () => request<{ series: Record<string, { run_id: string; created_at: string; score: number; pass_rate: number; regression_flags: string[] }[]>; regression_flags: string[] }>('/analysis/regressions'),
 };
