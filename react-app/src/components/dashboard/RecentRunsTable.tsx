@@ -1,4 +1,5 @@
 import React from 'react';
+import type { Run } from '../../api';
 import './Dashboard.css';
 
 interface RunData {
@@ -32,7 +33,16 @@ const mockRuns: RunData[] = [
   }
 ];
 
-export const RecentRunsTable: React.FC = () => {
+export const RecentRunsTable: React.FC<{ runs?: Run[] }> = ({ runs }) => {
+  const displayedRuns = runs === undefined ? mockRuns : runs.map((run) => ({
+    target: run.agent_name,
+    version: run.id,
+    batch: 'reliability evaluation',
+    scenarios: run.total_scenarios.toLocaleString(),
+    passRate: `${(run.pass_rate * 100).toFixed(1)}%`,
+    status: run.regression_flags.length ? 'FAILED' as const : 'PASS' as const,
+    timestamp: new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(run.created_at)),
+  }));
   return (
     <div className="card" style={{ marginTop: '1.25rem' }}>
       <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -53,7 +63,7 @@ export const RecentRunsTable: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {mockRuns.map((run, i) => (
+            {displayedRuns.map((run, i) => (
               <tr key={i}>
                 <td className="col-mono">{run.target}</td>
                 <td className="col-mono col-muted">{run.version}</td>
@@ -68,6 +78,7 @@ export const RecentRunsTable: React.FC = () => {
                 <td className="col-mono col-muted">{run.timestamp}</td>
               </tr>
             ))}
+            {displayedRuns.length === 0 && <tr><td colSpan={7} className="col-muted" style={{ textAlign: 'center', padding: '2rem' }}>No evaluations yet.</td></tr>}
           </tbody>
         </table>
       </div>

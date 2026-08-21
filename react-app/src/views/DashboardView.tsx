@@ -1,13 +1,24 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Layout } from '../components/layout/Layout';
 import { ReliabilityCard } from '../components/dashboard/ReliabilityCard';
 import { FailureTaxonomy } from '../components/dashboard/FailureTaxonomy';
 import { TraceCanvas } from '../components/dashboard/TraceCanvas';
 import { RecentRunsTable } from '../components/dashboard/RecentRunsTable';
 import { FileText, SearchCode, Beaker } from 'lucide-react';
+import { dashboardApi, type Agent, type Run } from '../api';
 import '../components/dashboard/Dashboard.css';
 
 export const DashboardView: React.FC = () => {
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [runs, setRuns] = useState<Run[]>([]);
+  const [breakdown, setBreakdown] = useState<Record<string, number>>({});
+  const [error, setError] = useState('');
+  useEffect(() => {
+    void dashboardApi.get()
+      .then((data) => { setAgents(data.agents); setRuns(data.recent_runs); setBreakdown(data.failure_breakdown); })
+      .catch(() => setError('Backend is unavailable. Start the API service on port 8000.'));
+  }, []);
+  const cardIcons = [undefined, FileText, SearchCode, Beaker];
   return (
     <Layout>
       <div className="dashboard-container">
@@ -28,47 +39,22 @@ export const DashboardView: React.FC = () => {
 
         {/* Reliability Metrics Grid */}
         <div className="reliability-grid">
-          <ReliabilityCard 
-            title="Customer Support" 
-            value="98.2%" 
-            trend={1.2} 
-            colorTheme="green"
-            sparklineData={[60, 65, 75, 72, 85, 90, 98.2]}
-          />
-          <ReliabilityCard 
-            title="Data Extraction" 
-            value="94.5%" 
-            trend={-0.0} 
-            icon={FileText}
-            colorTheme="gray"
-            sparklineData={[95, 94.8, 94.2, 95.1, 94.5, 94.5, 94.5]}
-          />
-          <ReliabilityCard 
-            title="Code Review" 
-            value="89.1%" 
-            trend={-3.4} 
-            icon={SearchCode}
-            colorTheme="red"
-            sparklineData={[96, 95, 92, 90, 85, 87, 89.1]}
-          />
-          <ReliabilityCard 
-            title="Research Intel" 
-            value="96.8%" 
-            trend={0.5} 
-            icon={Beaker}
-            colorTheme="green"
-            sparklineData={[93, 94, 94.5, 95, 96, 96.2, 96.8]}
-          />
+          {agents.slice(0, 4).map((agent, index) => {
+            const score = agent.latest_score ?? 0;
+            return <ReliabilityCard key={agent.id} title={agent.name} value={agent.latest_score === null ? '—' : `${score.toFixed(1)}%`} trend={0} icon={cardIcons[index]} colorTheme={agent.status === 'Degraded' ? 'red' : agent.latest_score === null ? 'gray' : 'green'} sparklineData={[score || 0, score || 0]} />;
+          })}
+          {agents.length === 0 && <div className="card stat-card" style={{ gridColumn: '1 / -1' }}>Register an agent to start monitoring reliability.</div>}
         </div>
 
         {/* Middle Section (Taxonomy + Trace Canvas) */}
         <div className="dashboard-middle-row">
-          <FailureTaxonomy />
+          <FailureTaxonomy breakdown={breakdown} />
           <TraceCanvas />
         </div>
 
         {/* Bottom Section */}
-        <RecentRunsTable />
+        <RecentRunsTable runs={runs} />
+        {error && <p style={{ color: 'var(--color-error)', marginTop: '1rem' }}>{error}</p>}
 
       </div>
     </Layout>
