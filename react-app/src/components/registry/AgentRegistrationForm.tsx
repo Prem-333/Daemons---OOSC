@@ -55,8 +55,12 @@ export const AgentRegistrationForm: React.FC<{ onRegistered: () => void }> = ({ 
         <div className="form-group">
           <div className="form-label">IMPORT AGENT PACKAGE</div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <input className="form-control" value={agentFolder} onChange={(event) => setAgentFolder(event.target.value)} placeholder="example_support_agent" />
+            <input className="form-control" value={agentFolder} onChange={(event) => setAgentFolder(event.target.value)} placeholder="Enter an agent folder name" />
             <button className="btn btn-outline" type="button" onClick={importPackage} disabled={saving}>Import folder</button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+            <span className="text-small text-muted">Try the included sample:</span>
+            <button className="btn btn-outline" type="button" onClick={() => setAgentFolder('example_support_agent')} disabled={saving} style={{ height: 'auto', padding: '0.25rem 0.45rem', fontFamily: 'Space Mono, monospace', fontSize: '0.72rem' }}>example_support_agent</button>
           </div>
           <p className="text-small text-muted" style={{ margin: '0.4rem 0 0' }}>Folder must be inside <code>osoo/agents</code> and contain agent.py.</p>
           <button className="btn btn-outline" type="button" onClick={importGeminiAgent} disabled={saving} style={{ marginTop: '0.5rem' }}>Import included live Gemini agent</button>

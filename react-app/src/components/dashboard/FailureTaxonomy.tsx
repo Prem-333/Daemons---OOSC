@@ -25,18 +25,12 @@ const TaxonomyItem: React.FC<TaxonomyItemProps> = ({ label, percentage, colorCla
 };
 
 export const FailureTaxonomy: React.FC<{ breakdown?: Record<string, number> }> = ({ breakdown }) => {
-  const fallback: TaxonomyItemProps[] = [
-    { label: 'Hallucinated Confidence', percentage: 42, colorClass: 'fill-red' },
-    { label: 'Tool-Call Loop', percentage: 28, colorClass: 'fill-gray' },
-    { label: 'Timeout', percentage: 18, colorClass: 'fill-gray' },
-    { label: 'Destructive Action', percentage: 12, colorClass: 'fill-gray' },
-  ];
   const total = Object.values(breakdown ?? {}).reduce((sum, count) => sum + count, 0);
   const data = total ? Object.entries(breakdown ?? {}).map(([label, count], index) => ({
     label: label.replaceAll('_', ' '),
     percentage: Math.round((count / total) * 100),
     colorClass: index === 0 ? 'fill-red' as const : 'fill-gray' as const,
-  })) : fallback;
+  })) : [];
 
   return (
     <div className="card">
@@ -48,6 +42,7 @@ export const FailureTaxonomy: React.FC<{ breakdown?: Record<string, number> }> =
           {data.map((item, i) => (
             <TaxonomyItem key={i} {...item} />
           ))}
+          {!data.length && <p className="text-muted text-small" style={{ margin: 0 }}>No failures recorded in this session. Run an evaluation to populate the taxonomy.</p>}
         </div>
       </div>
     </div>
