@@ -37,8 +37,9 @@ export type Trace = {
 export type RunDetails = Run & { traces: Trace[]; scenarios: Scenario[]; failure_labels: { scenario_id: string; failure_mode: string; rationale: string; passed: boolean }[] };
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const sessionId = getActiveSessionId();
   const response = await fetch(`/api${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    headers: { 'Content-Type': 'application/json', ...(sessionId ? { 'X-AgentCI-Session-Id': sessionId } : {}), ...options?.headers },
     ...options,
   });
   if (!response.ok) {
@@ -47,6 +48,28 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
   return response.json() as Promise<T>;
 }
+
+const SESSION_KEY = 'agentci-active-session';
+
+export const getActiveSessionId = () => localStorage.getItem(SESSION_KEY);
+
+export const setActiveSessionId = (sessionId: string) => {
+  localStorage.setItem(SESSION_KEY, sessionId);
+  window.dispatchEvent(new Event('agentci-session-change'));
+};
+
+export type EvaluationSession = { id: string; name: string; created_at: string; updated_at: string; agent_count: number; run_count: number };
+
+export const sessionApi = {
+  list: () => request<EvaluationSession[]>('/sessions'),
+  create: (name?: string) => request<EvaluationSession>('/sessions', { method: 'POST', body: JSON.stringify({ name: name || null }) }),
+  rename: (id: string, name: string) => request<EvaluationSession>(`/sessions/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+  delete: async (id: string) => {
+    const sessionId = getActiveSessionId();
+    const response = await fetch(`/api/sessions/${id}`, { method: 'DELETE', headers: sessionId ? { 'X-AgentCI-Session-Id': sessionId } : {} });
+    if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail ?? 'Could not delete session.');
+  },
+};
 
 export const agentApi = {
   list: () => request<Agent[]>('/agents'),

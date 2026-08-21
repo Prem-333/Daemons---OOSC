@@ -51,6 +51,24 @@
   gap: 0.25rem;
 }
 
+.session-history { margin-top: auto; border-top: 1px solid var(--color-border); padding: 0.9rem 0.75rem; }
+.session-history-header { display: flex; justify-content: space-between; align-items: center; color: var(--color-text-muted); font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em; margin: 0 0.45rem 0.5rem; }
+.new-session-button { border: 0; background: none; color: var(--color-primary); cursor: pointer; font-size: 0.75rem; font-weight: 700; }
+.session-list { display: grid; gap: 0.25rem; max-height: 190px; overflow-y: auto; }
+.session-item { background: transparent; color: var(--color-text-main); border-radius: var(--radius-sm); padding: 0.35rem 0.4rem; display: flex; align-items: center; gap: 0.25rem; font-size: 0.75rem; }
+.session-item small { color: var(--color-text-muted); font-size: 0.65rem; }
+.session-item:hover, .session-item.active { background: var(--color-bg-hover); }
+.session-item.active { outline: 1px solid var(--color-primary); }
+.session-select { border: 0; background: transparent; color: inherit; cursor: pointer; text-align: left; display: grid; gap: 0.2rem; flex: 1; min-width: 0; padding: 0.15rem; }
+.session-select span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-actions { display: flex; opacity: 0; }
+.session-item:hover .session-actions, .session-item.active .session-actions { opacity: 1; }
+.session-actions button, .session-rename button { border: 0; background: transparent; color: var(--color-text-muted); cursor: pointer; padding: 0.2rem; }
+.session-actions button:last-child { color: var(--color-error); }
+.session-rename { display: flex; align-items: center; flex: 1; min-width: 0; }
+.session-rename input { width: 100%; min-width: 0; border: 1px solid var(--color-primary); border-radius: 3px; padding: 0.2rem; background: var(--color-bg-main); color: var(--color-text-main); font-size: 0.72rem; }
+.session-empty { color: var(--color-text-muted); font-size: 0.72rem; padding: 0.5rem; }
+
 .nav-item {
   display: flex;
   align-items: center;

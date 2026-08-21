@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -35,6 +35,14 @@ class AgentCreate(BaseModel):
     tool_schemas: list[dict[str, Any]] = Field(default_factory=list)
     allow_destructive_actions: bool = False
     adapter_path: str | None = None
+
+
+class SessionCreate(BaseModel):
+    name: str | None = Field(default=None, max_length=100)
+
+
+class SessionUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
 
 
 class AgentImport(BaseModel):
@@ -67,28 +75,74 @@ class Store:
 
     def _read(self) -> dict[str, list[dict[str, Any]]]:
         if not self.path.exists():
-            return {"agents": [], "runs": []}
+            return {"sessions": [], "agents": [], "runs": []}
         try:
-            return json.loads(self.path.read_text())
+            data = json.loads(self.path.read_text())
+            return {"sessions": data.get("sessions", []), "agents": data.get("agents", []), "runs": data.get("runs", [])}
         except (OSError, json.JSONDecodeError):
-            return {"agents": [], "runs": []}
+            return {"sessions": [], "agents": [], "runs": []}
 
     def _write(self, data: dict[str, list[dict[str, Any]]]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(data, indent=2))
 
-    def list_agents(self) -> list[dict[str, Any]]:
+    def create_session(self, name: str | None) -> dict[str, Any]:
         with self.lock:
-            return self._read()["agents"]
+            data = self._read()
+            created_at = _now()
+            session = {"id": f"session_{uuid.uuid4().hex[:10]}", "name": name or f"Session {datetime.now().strftime('%b %d, %H:%M')}", "created_at": created_at, "updated_at": created_at}
+            data["sessions"].insert(0, session)
+            self._write(data)
+            return session
 
-    def create_agent(self, payload: AgentCreate) -> dict[str, Any]:
+    def list_sessions(self) -> list[dict[str, Any]]:
+        with self.lock:
+            data = self._read()
+            sessions = []
+            for session in data["sessions"]:
+                session_id = session["id"]
+                sessions.append({**session, "agent_count": sum(item.get("session_id") == session_id for item in data["agents"]), "run_count": sum(item.get("session_id") == session_id for item in data["runs"])})
+            return sessions
+
+    def rename_session(self, session_id: str, name: str) -> dict[str, Any] | None:
+        with self.lock:
+            data = self._read()
+            for session in data["sessions"]:
+                if session["id"] == session_id:
+                    session["name"] = name.strip()
+                    session["updated_at"] = _now()
+                    self._write(data)
+                    return session
+            return None
+
+    def delete_session(self, session_id: str) -> bool:
+        """Permanently remove one session and all agents/runs/traces it owns."""
+        with self.lock:
+            data = self._read()
+            if not any(session["id"] == session_id for session in data["sessions"]):
+                return False
+            data["sessions"] = [session for session in data["sessions"] if session["id"] != session_id]
+            data["agents"] = [agent for agent in data["agents"] if agent.get("session_id") != session_id]
+            data["runs"] = [run for run in data["runs"] if run.get("session_id") != session_id]
+            self._write(data)
+            return True
+
+    def session_exists(self, session_id: str) -> bool:
+        return any(item["id"] == session_id for item in self.list_sessions())
+
+    def list_agents(self, session_id: str) -> list[dict[str, Any]]:
+        with self.lock:
+            return [agent for agent in self._read()["agents"] if agent.get("session_id") == session_id]
+
+    def create_agent(self, payload: AgentCreate, session_id: str) -> dict[str, Any]:
         with self.lock:
             data = self._read()
             normalized_name = payload.name.strip().lower()
-            if any(agent["name"].lower() == normalized_name for agent in data["agents"]):
+            if any(agent["name"].lower() == normalized_name and agent.get("session_id") == session_id for agent in data["agents"]):
                 raise ValueError("An agent with this name is already registered.")
             agent = {
                 "id": f"agent_{uuid.uuid4().hex[:10]}",
+                "session_id": session_id,
                 **payload.model_dump(),
                 "created_at": _now(),
                 "last_evaluated_at": None,
@@ -99,10 +153,10 @@ class Store:
             self._write(data)
             return agent
 
-    def get_agent(self, agent_id: str) -> dict[str, Any] | None:
-        return next((agent for agent in self.list_agents() if agent["id"] == agent_id), None)
+    def get_agent(self, agent_id: str, session_id: str) -> dict[str, Any] | None:
+        return next((agent for agent in self.list_agents(session_id) if agent["id"] == agent_id), None)
 
-    def add_run(self, agent_id: str, run: dict[str, Any]) -> None:
+    def add_run(self, agent_id: str, session_id: str, run: dict[str, Any]) -> None:
         with self.lock:
             data = self._read()
             data["runs"].insert(0, run)
@@ -111,11 +165,14 @@ class Store:
                     agent["last_evaluated_at"] = run["created_at"]
                     agent["latest_score"] = run["overall_reliability_score"]
                     agent["status"] = "Healthy" if run["overall_reliability_score"] >= 80 else "Degraded"
+            for session in data["sessions"]:
+                if session["id"] == session_id:
+                    session["updated_at"] = _now()
             self._write(data)
 
-    def list_runs(self) -> list[dict[str, Any]]:
+    def list_runs(self, session_id: str) -> list[dict[str, Any]]:
         with self.lock:
-            return self._read()["runs"]
+            return [run for run in self._read()["runs"] if run.get("session_id") == session_id]
 
 
 def _now() -> str:
@@ -200,6 +257,12 @@ def _gemini_package_installed() -> bool:
     return importlib.util.find_spec("langchain_google_genai") is not None
 
 
+def active_session(x_agentci_session_id: str | None = Header(default=None)) -> str:
+    if not x_agentci_session_id or not store.session_exists(x_agentci_session_id):
+        raise HTTPException(status_code=400, detail="Select or create an evaluation session first.")
+    return x_agentci_session_id
+
+
 @app.put("/api/providers/gemini")
 def configure_gemini(payload: GeminiConfiguration) -> dict[str, Any]:
     """Set a local runtime key; it is never persisted or returned by this API."""
@@ -212,21 +275,45 @@ def configure_gemini(payload: GeminiConfiguration) -> dict[str, Any]:
     return {"configured": True, "model": gemini_runtime["model"], "package_installed": _gemini_package_installed()}
 
 
+@app.post("/api/sessions", status_code=status.HTTP_201_CREATED)
+def create_session(payload: SessionCreate) -> dict[str, Any]:
+    return store.create_session(payload.name)
+
+
+@app.get("/api/sessions")
+def list_sessions() -> list[dict[str, Any]]:
+    return store.list_sessions()
+
+
+@app.patch("/api/sessions/{session_id}")
+def rename_session(session_id: str, payload: SessionUpdate) -> dict[str, Any]:
+    session = store.rename_session(session_id, payload.name)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    return session
+
+
+@app.delete("/api/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_session(session_id: str) -> None:
+    if not store.delete_session(session_id):
+        raise HTTPException(status_code=404, detail="Session not found.")
+
+
 @app.get("/api/agents")
-def list_agents() -> list[dict[str, Any]]:
-    return store.list_agents()
+def list_agents(session_id: str = Depends(active_session)) -> list[dict[str, Any]]:
+    return store.list_agents(session_id)
 
 
 @app.post("/api/agents", status_code=status.HTTP_201_CREATED)
-def create_agent(payload: AgentCreate) -> dict[str, Any]:
+def create_agent(payload: AgentCreate, session_id: str = Depends(active_session)) -> dict[str, Any]:
     try:
-        return store.create_agent(payload)
+        return store.create_agent(payload, session_id)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @app.post("/api/agents/import", status_code=status.HTTP_201_CREATED)
-def import_agent(payload: AgentImport) -> dict[str, Any]:
+def import_agent(payload: AgentImport, session_id: str = Depends(active_session)) -> dict[str, Any]:
     """Register a trusted local agent package without connecting it to real tools."""
     try:
         adapter = load_agent_adapter(payload.folder)
@@ -241,36 +328,36 @@ def import_agent(payload: AgentImport) -> dict[str, Any]:
             tool_schemas=tool_schemas,
             allow_destructive_actions=any(tool.get("destructive", False) for tool in tool_schemas),
             adapter_path=payload.folder,
-        ))
+        ), session_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/agents/{agent_id}")
-def get_agent(agent_id: str) -> dict[str, Any]:
-    agent = store.get_agent(agent_id)
+def get_agent(agent_id: str, session_id: str = Depends(active_session)) -> dict[str, Any]:
+    agent = store.get_agent(agent_id, session_id)
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found.")
     return agent
 
 
 @app.get("/api/runs")
-def list_runs(limit: int = 20) -> list[dict[str, Any]]:
-    return store.list_runs()[:max(1, min(limit, 100))]
+def list_runs(limit: int = 20, session_id: str = Depends(active_session)) -> list[dict[str, Any]]:
+    return store.list_runs(session_id)[:max(1, min(limit, 100))]
 
 
 @app.get("/api/runs/{run_id}")
-def get_run(run_id: str) -> dict[str, Any]:
-    run = next((item for item in store.list_runs() if item["id"] == run_id), None)
+def get_run(run_id: str, session_id: str = Depends(active_session)) -> dict[str, Any]:
+    run = next((item for item in store.list_runs(session_id) if item["id"] == run_id), None)
     if run is None:
         raise HTTPException(status_code=404, detail="Evaluation run not found.")
     return run
 
 
 @app.post("/api/agents/{agent_id}/scenarios")
-def generate_scenarios(agent_id: str, request: ScenarioRequest) -> list[dict[str, Any]]:
+def generate_scenarios(agent_id: str, request: ScenarioRequest, session_id: str = Depends(active_session)) -> list[dict[str, Any]]:
     """Generate a preview batch without running agent tools or saving a scorecard."""
-    agent_record = store.get_agent(agent_id)
+    agent_record = store.get_agent(agent_id, session_id)
     if agent_record is None:
         raise HTTPException(status_code=404, detail="Agent not found.")
     schemas = agent_record.get("tool_schemas", [])
@@ -281,13 +368,13 @@ def generate_scenarios(agent_id: str, request: ScenarioRequest) -> list[dict[str
 
 
 @app.post("/api/agents/{agent_id}/evaluate", status_code=status.HTTP_201_CREATED)
-def evaluate_agent(agent_id: str, request: EvaluationRequest) -> dict[str, Any]:
+def evaluate_agent(agent_id: str, request: EvaluationRequest, session_id: str = Depends(active_session)) -> dict[str, Any]:
     """Run the registered configuration through the bundled sandboxed sample adapter.
 
     The engine remains adapter-based: replace ``SampleSupportAgent`` here with a
     production AgentAdapter to execute a real deployed agent.
     """
-    agent_record = store.get_agent(agent_id)
+    agent_record = store.get_agent(agent_id, session_id)
     if agent_record is None:
         raise HTTPException(status_code=404, detail="Agent not found.")
 
@@ -315,6 +402,7 @@ def evaluate_agent(agent_id: str, request: EvaluationRequest) -> dict[str, Any]:
         **scorecard,
         "id": scorecard.pop("run_id"),
         "agent_id": agent_id,
+        "session_id": session_id,
         "created_at": _now(),
         "duration_seconds": round(sum(trace.wall_clock_seconds for trace in state["traces"]), 2),
         "failure_labels": [item.model_dump(mode="json") for item in state["failure_labels"]],
@@ -322,14 +410,14 @@ def evaluate_agent(agent_id: str, request: EvaluationRequest) -> dict[str, Any]:
         "scenarios": [item.model_dump(mode="json") for item in state["scenarios"]],
         "traces": [item.to_replay_json() for item in state["traces"]],
     }
-    store.add_run(agent_id, run)
+    store.add_run(agent_id, session_id, run)
     return run
 
 
 @app.get("/api/analysis/failures")
-def failure_analysis() -> dict[str, Any]:
+def failure_analysis(session_id: str = Depends(active_session)) -> dict[str, Any]:
     modes: dict[str, dict[str, Any]] = {}
-    for run in store.list_runs():
+    for run in store.list_runs(session_id):
         traces = {trace["scenario_id"]: trace for trace in run.get("traces", [])}
         for label in run.get("failure_labels", []):
             if label.get("passed"):
@@ -345,17 +433,17 @@ def failure_analysis() -> dict[str, Any]:
 
 
 @app.get("/api/analysis/guardrails")
-def guardrail_analysis() -> list[dict[str, Any]]:
+def guardrail_analysis(session_id: str = Depends(active_session)) -> list[dict[str, Any]]:
     return [
         {"run_id": run["id"], "agent_name": run["agent_name"], **probe}
-        for run in store.list_runs() for probe in run.get("guardrail_results", [])
+        for run in store.list_runs(session_id) for probe in run.get("guardrail_results", [])
     ]
 
 
 @app.get("/api/analysis/regressions")
-def regression_analysis() -> dict[str, Any]:
+def regression_analysis(session_id: str = Depends(active_session)) -> dict[str, Any]:
     series: dict[str, list[dict[str, Any]]] = {}
-    for run in reversed(store.list_runs()):
+    for run in reversed(store.list_runs(session_id)):
         series.setdefault(run["agent_name"], []).append({
             "run_id": run["id"], "created_at": run["created_at"], "score": run["overall_reliability_score"],
             "pass_rate": run["pass_rate"], "regression_flags": run.get("regression_flags", []),
@@ -365,8 +453,8 @@ def regression_analysis() -> dict[str, Any]:
 
 
 @app.get("/api/dashboard")
-def dashboard() -> dict[str, Any]:
-    agents, runs = store.list_agents(), store.list_runs()
+def dashboard(session_id: str = Depends(active_session)) -> dict[str, Any]:
+    agents, runs = store.list_agents(session_id), store.list_runs(session_id)
     failure_breakdown: dict[str, int] = {}
     for run in runs:
         for mode, count in run.get("failure_mode_breakdown", {}).items():

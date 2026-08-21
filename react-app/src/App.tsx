@@ -7,11 +7,18 @@ import { GuardrailTesterView } from './views/GuardrailTesterView';
 import { RegressionTrackerView } from './views/RegressionTrackerView';
 import { SettingsView } from './views/SettingsView';
 import { ReplayViewerView } from './views/ReplayViewerView';
+import { useEffect, useState } from 'react';
 
 function App() {
+  const [sessionVersion, setSessionVersion] = useState(0);
+  useEffect(() => {
+    const update = () => setSessionVersion((value) => value + 1);
+    window.addEventListener('agentci-session-change', update);
+    return () => window.removeEventListener('agentci-session-change', update);
+  }, []);
   return (
     <Router>
-      <Routes>
+      <Routes key={sessionVersion}>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<DashboardView />} />
         <Route path="/registry" element={<RegistryView />} />
