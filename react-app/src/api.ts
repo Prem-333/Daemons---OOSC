@@ -24,6 +24,18 @@ export type Run = {
   regression_flags: string[];
 };
 
+export type Trace = {
+  scenario_id: string;
+  messages: { role: string; content: string }[];
+  tool_calls: { tool_name: string; arguments: Record<string, unknown>; result: unknown; is_destructive: boolean; confirmed_by_user: boolean }[];
+  final_answer: string;
+  steps_taken: number;
+  wall_clock_seconds: number;
+  raised_exception?: string | null;
+};
+
+export type RunDetails = Run & { traces: Trace[]; scenarios: Scenario[]; failure_labels: { scenario_id: string; failure_mode: string; rationale: string; passed: boolean }[] };
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
     headers: { 'Content-Type': 'application/json', ...options?.headers },
@@ -52,6 +64,7 @@ export type Scenario = { id: string; type: string; title: string; user_message: 
 
 export const dashboardApi = {
   get: () => request<{ agents: Agent[]; recent_runs: Run[]; failure_breakdown: Record<string, number>; summary: { registered_agents: number; evaluated_agents: number; average_reliability: number | null } }>('/dashboard'),
+  run: (id: string) => request<RunDetails>(`/runs/${id}`),
 };
 
 export const providerApi = {

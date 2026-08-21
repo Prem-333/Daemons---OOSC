@@ -5,7 +5,7 @@ import { FailureTaxonomy } from '../components/dashboard/FailureTaxonomy';
 import { TraceCanvas } from '../components/dashboard/TraceCanvas';
 import { RecentRunsTable } from '../components/dashboard/RecentRunsTable';
 import { FileText, SearchCode, Beaker } from 'lucide-react';
-import { dashboardApi, type Agent, type Run } from '../api';
+import { dashboardApi, type Agent, type Run, type RunDetails } from '../api';
 import '../components/dashboard/Dashboard.css';
 
 export const DashboardView: React.FC = () => {
@@ -13,11 +13,18 @@ export const DashboardView: React.FC = () => {
   const [runs, setRuns] = useState<Run[]>([]);
   const [breakdown, setBreakdown] = useState<Record<string, number>>({});
   const [error, setError] = useState('');
+  const [selectedRun, setSelectedRun] = useState<RunDetails>();
+  const [loadingReplay, setLoadingReplay] = useState(false);
   useEffect(() => {
     void dashboardApi.get()
       .then((data) => { setAgents(data.agents); setRuns(data.recent_runs); setBreakdown(data.failure_breakdown); })
       .catch(() => setError('Backend is unavailable. Start the API service on port 8000.'));
   }, []);
+  const loadReplay = async (runId: string) => {
+    try { setLoadingReplay(true); setSelectedRun(await dashboardApi.run(runId)); }
+    catch { setError('Could not load the run replay.'); }
+    finally { setLoadingReplay(false); }
+  };
   const cardIcons = [undefined, FileText, SearchCode, Beaker];
   return (
     <Layout>
@@ -49,11 +56,11 @@ export const DashboardView: React.FC = () => {
         {/* Middle Section (Taxonomy + Trace Canvas) */}
         <div className="dashboard-middle-row">
           <FailureTaxonomy breakdown={breakdown} />
-          <TraceCanvas />
+          <TraceCanvas run={selectedRun} loading={loadingReplay} />
         </div>
 
         {/* Bottom Section */}
-        <RecentRunsTable runs={runs} />
+        <RecentRunsTable runs={runs} onReplay={loadReplay} />
         {error && <p style={{ color: 'var(--color-error)', marginTop: '1rem' }}>{error}</p>}
 
       </div>

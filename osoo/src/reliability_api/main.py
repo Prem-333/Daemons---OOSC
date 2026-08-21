@@ -259,6 +259,14 @@ def list_runs(limit: int = 20) -> list[dict[str, Any]]:
     return store.list_runs()[:max(1, min(limit, 100))]
 
 
+@app.get("/api/runs/{run_id}")
+def get_run(run_id: str) -> dict[str, Any]:
+    run = next((item for item in store.list_runs() if item["id"] == run_id), None)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Evaluation run not found.")
+    return run
+
+
 @app.post("/api/agents/{agent_id}/scenarios")
 def generate_scenarios(agent_id: str, request: ScenarioRequest) -> list[dict[str, Any]]:
     """Generate a preview batch without running agent tools or saving a scorecard."""

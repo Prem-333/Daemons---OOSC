@@ -33,8 +33,9 @@ const mockRuns: RunData[] = [
   }
 ];
 
-export const RecentRunsTable: React.FC<{ runs?: Run[] }> = ({ runs }) => {
+export const RecentRunsTable: React.FC<{ runs?: Run[]; onReplay?: (runId: string) => void }> = ({ runs, onReplay }) => {
   const displayedRuns = runs === undefined ? mockRuns : runs.map((run) => ({
+    id: run.id,
     target: run.agent_name,
     version: run.id,
     batch: 'reliability evaluation',
@@ -60,11 +61,13 @@ export const RecentRunsTable: React.FC<{ runs?: Run[] }> = ({ runs }) => {
               <th>PASS RATE</th>
               <th>STATUS</th>
               <th>TIMESTAMP</th>
+              <th>REPLAY</th>
             </tr>
           </thead>
           <tbody>
-            {displayedRuns.map((run, i) => (
-              <tr key={i}>
+            {displayedRuns.map((run, i) => {
+              const runId = 'id' in run && typeof run.id === 'string' ? run.id : undefined;
+              return <tr key={i}>
                 <td className="col-mono">{run.target}</td>
                 <td className="col-mono col-muted">{run.version}</td>
                 <td className="col-mono">{run.batch}</td>
@@ -76,9 +79,10 @@ export const RecentRunsTable: React.FC<{ runs?: Run[] }> = ({ runs }) => {
                   </span>
                 </td>
                 <td className="col-mono col-muted">{run.timestamp}</td>
+                <td>{runId && onReplay ? <button className="btn btn-outline" style={{ padding: '0.25rem 0.5rem', height: 'auto' }} onClick={() => onReplay(runId)}>View trace</button> : '—'}</td>
               </tr>
-            ))}
-            {displayedRuns.length === 0 && <tr><td colSpan={7} className="col-muted" style={{ textAlign: 'center', padding: '2rem' }}>No evaluations yet.</td></tr>}
+            })}
+            {displayedRuns.length === 0 && <tr><td colSpan={8} className="col-muted" style={{ textAlign: 'center', padding: '2rem' }}>No evaluations yet.</td></tr>}
           </tbody>
         </table>
       </div>
