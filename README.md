@@ -1,61 +1,41 @@
-# AgentCI
+# Agent Reliability Engine
 
-A React-based frontend dashboard interface for monitoring, evaluating, and testing autonomous AI agents.
-
-![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
-![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white)
-![Vite](https://img.shields.io/badge/vite-%23646CFF.svg?style=for-the-badge&logo=vite&logoColor=white)
+LangGraph-based CI-style reliability evaluation for AI agents with a React dashboard.
 
 <!-- TODO: screenshot or 60s demo GIF here -->
 
 ## The Problem
-As autonomous AI agents execute complex, multi-step tasks, developers lack visibility into why they fail, drift from their goals, or execute unauthorized destructive actions. Without structured tooling, tracking performance degradation across model versions or testing against adversarial prompt injections becomes a manual, error-prone process. For instance, when a Code Generation module's performance drops by 14% on a staging cluster, teams need immediate, visual alerts rather than digging through raw telemetry logs.
+As autonomous AI agents execute tasks, they can fall into tool-call loops, silently drift from their goals, or execute unauthorized destructive actions. Without structured tooling, tracking performance degradation across model versions or testing against adversarial prompt injections is manual and error-prone. Teams need visibility into execution traces to understand exactly why and where an agent failed.
 
 ## The Solution
-- **Agent Registry (`src/views/RegistryView.tsx`)**: An interface to manage connected agents, view their health status, and explicitly configure destructive action permissions.
-- **Scenario Generation (`src/views/ScenarioGeneratorView.tsx`)**: A configuration panel to generate synthetic test batches, allowing users to tune the distribution mix across Realistic, Adversarial, and Prompt Injection vectors.
-- **Failure Taxonomy (`src/views/FailureTaxonomyView.tsx`)**: A deep-dive analytics dashboard that tracks total failures, Mean Time to Failure (MTTF), and categorizes incidents into dominant vectors like "Tool-Call Loop" or "Goal Drift".
-- **Guardrail Testing (`src/views/GuardrailTesterView.tsx`)**: An evaluation matrix tracking agent resilience against unauthorized critical operations (e.g., `system.delete_db`), surfacing `FAIL-DESTRUCTIVE` execution traces.
-- **Regression Tracking (`src/views/RegressionTrackerView.tsx`)**: A visual monitoring dashboard featuring a scorecard and trend charts to track performance drift across different model versions.
+- **Synthetic Test Generation**: Automatically generates Realistic, Adversarial, Ambiguous, and Destructive Pressure scenarios (`osoo/src/reliability_engine/scenario_generator.py`).
+- **Sandboxed Execution**: Runs agent tool calls in an isolated, mocked environment to safely capture `ExecutionTrace` objects (`osoo/src/reliability_engine/sandbox.py`).
+- **Failure Taxonomy**: Classifies exact failure modes (e.g., `HALLUCINATED_CONFIDENCE`, `SILENT_GOAL_DRIFT`) via an LLM evaluator (`osoo/src/reliability_engine/failure_classifier.py`).
+- **Guardrail Testing**: Probes traces for unsafe actions taken without confirmation (`osoo/src/reliability_engine/guardrail_tester.py`).
+- **FastAPI Backend & React Dashboard**: Exposes a REST API (`osoo/src/reliability_api/main.py`) consumed by a React interface to visualize scorecard history and regressions (`react-app/src/views/`).
 
 ## Architecture Diagram
 ```mermaid
 graph TD
-    App[App.tsx: React Router]
+    React[React App: Dashboard Views]
+    FastAPI[FastAPI: Reliability API]
+    Graph[LangGraph: Evaluation Pipeline]
     
-    subgraph Layout Components
-        Layout[Layout Shell]
-        Sidebar[Sidebar Navigation]
-        TopNav[Top Navigation]
-    end
+    React -->|HTTP/REST| FastAPI
+    FastAPI -->|invokes| Graph
     
-    App --> Layout
-    Layout --> Sidebar
-    Layout --> TopNav
-    
-    subgraph Route Views
-        Dashboard[DashboardView]
-        Registry[RegistryView]
-        Scenario[ScenarioGeneratorView]
-        Taxonomy[FailureTaxonomyView]
-        Guardrail[GuardrailTesterView]
-        Regression[RegressionTrackerView]
-        Settings[SettingsView]
-    end
-    
-    App --> Dashboard
-    App --> Registry
-    App --> Scenario
-    App --> Taxonomy
-    App --> Guardrail
-    App --> Regression
-    App --> Settings
-    
-    subgraph Key Domain Components
-        Taxonomy --> Explorer[FailureModesExplorer]
-        Regression --> Chart[ReliabilityChart]
-        Guardrail --> Probes[ProbesTable]
-        Scenario --> Config[ScenarioConfigPanel]
+    subgraph Reliability Engine
+        Gen[ScenarioGenerator]
+        Sandbox[SandboxExecutor]
+        Classifier[FailureClassifier]
+        Guardrail[GuardrailTester]
+        Scorecard[ScorecardBuilder]
+        
+        Graph --> Gen
+        Gen --> Sandbox
+        Sandbox --> Classifier
+        Classifier --> Guardrail
+        Guardrail --> Scorecard
     end
 ```
 
@@ -63,43 +43,52 @@ graph TD
 ```mermaid
 sequenceDiagram
     actor User
-    participant App as App.tsx (Router)
-    participant Layout as Layout.tsx
-    participant View as FailureTaxonomyView.tsx
-    participant Explorer as FailureModesExplorer.tsx
-
-    User->>Layout: Clicks "Failure Taxonomy" in Sidebar
-    Layout->>App: Navigates to /failure-taxonomy route
-    App->>View: Renders FailureTaxonomyView component
-    View->>Explorer: Mounts FailureModesExplorer with mock trace data
-    User->>Explorer: Clicks "Tool-Call Loop" accordion header
-    Explorer-->>User: Expands to show table of specific execution traces and latencies
+    participant React as React Dashboard
+    participant API as FastAPI (main.py)
+    participant Graph as LangGraph (graph.py)
+    participant Sandbox as SandboxExecutor
+    
+    User->>React: Click "Evaluate Agent"
+    React->>API: POST /api/agents/{agent_id}/evaluate
+    API->>Graph: invoke(agent_system_prompt, tool_schemas)
+    Graph->>Graph: generate_scenarios()
+    Graph->>Sandbox: run_batch(scenarios)
+    Sandbox-->>Graph: ExecutionTrace[] (messages, tool_calls)
+    Graph->>Graph: classify_failures()
+    Graph->>Graph: run_guardrails()
+    Graph->>Graph: build_scorecard()
+    Graph-->>API: ReliabilityScorecard & Traces
+    API-->>React: JSON Run Results
+    React-->>User: Render scorecard and failure labels
 ```
 
 ## Tech Stack
 | Layer | Technology | Why |
 |-------|------------|-----|
-| **UI Library** | React 19 | Component-based view rendering for complex dashboard widgets |
-| **Build Tool** | Vite 8 | Fast HMR and optimized production bundling |
-| **Language** | TypeScript 6 | Static typing for components and mock data models |
-| **Routing** | react-router-dom | Client-side navigation between distinct dashboard views |
-| **Icons** | lucide-react | Consistent SVG iconography across the interface |
-| **Linting** | oxlint | Fast static analysis and code linting |
+| **Backend API** | FastAPI & Uvicorn | REST endpoints for dashboard and integrations |
+| **Evaluation Engine** | LangGraph & LangChain Core | Orchestrates the multi-stage CI pipeline state machine |
+| **Data Validation** | Pydantic | Typed schemas for scenarios, execution traces, and scorecards |
+| **Frontend** | React 19 & Vite 8 | Component-based view rendering and fast development server |
+| **Routing** | react-router-dom | Client-side navigation across evaluation views |
 
 ## What Makes This Different
-- **Zero-Dependency Styling**: All components, including complex data visualizations like the multi-trend line chart in `ReliabilityChart.tsx` and custom toggle switches, are built using pure CSS and inline SVGs. This avoids heavy layout libraries and ensures a uniquely tailored premium aesthetic.
-- **Component-Level Mock Data**: Each view (e.g., `ProbesTable.tsx`, `ScorecardSummary.tsx`) encapsulates its own typed mock data structures, allowing rapid UI iteration and immediate visualization of complex agent telemetry concepts before backend integration.
+- **Deterministic Pipeline**: Uses a structured LangGraph state machine (`graph.py`) to transition from generation to execution to evaluation, rather than a single massive LLM prompt.
+- **Trace-Level Classification**: Evaluates precise `ExecutionTrace` objects with complete tool arguments and timestamps (`models.py`), enabling exact guardrail checks instead of generic string-matching.
+- **Pluggable Agent Adapters**: Dynamically loads local agent packages and generates fake tool handlers based on declared schemas (`main.py`), preventing network side-effects during testing.
 
 ## Quickstart
 
 ```bash
-# Navigate to the React application directory
+# 1. Start the Backend API
+cd osoo
+# Install dependencies (using uv or pip)
+uv pip install -e .[gemini]
+export GOOGLE_API_KEY="your_api_key_here"
+agent-reliability-api
+
+# 2. Start the Frontend Dashboard (in a new terminal)
 cd react-app
-
-# Install dependencies
 npm install
-
-# Start the Vite development server
 npm run dev
 ```
 
@@ -107,30 +96,26 @@ npm run dev
 <summary>Project Structure</summary>
 
 ```text
-react-app/
-├── public/                 # Static public assets
-└── src/
-    ├── components/         # Reusable UI components
-    │   ├── dashboard/      # Core dashboard widgets (ReliabilityCard, TraceCanvas)
-    │   ├── guardrails/     # ProbesTable and evaluation components
-    │   ├── layout/         # Sidebar and TopNav shell
-    │   ├── registry/       # Agent list and registration form
-    │   ├── regression/     # Reliability charts and scorecards
-    │   ├── scenarios/      # Configuration panels and preview pools
-    │   └── taxonomy/       # Failure mode explorers and metrics
-    ├── views/              # Top-level page components for router
-    ├── App.tsx             # Main application router and entry
-    └── index.css           # Global design system and CSS variables
+/
+├── osoo/
+│   ├── agents/                   # Directory for imported local agent packages
+│   ├── src/reliability_api/      # FastAPI server and HTTP endpoints
+│   ├── src/reliability_engine/   # LangGraph pipeline, classifiers, sandbox
+│   └── pyproject.toml            # Python dependencies and CLI scripts
+└── react-app/
+    ├── src/components/           # Reusable dashboard widgets
+    ├── src/views/                # Dashboard routes (Taxonomy, Guardrails, etc.)
+    └── package.json              # Frontend configuration
 ```
 </details>
 
 ## Challenges & What We Learned
-Building complex data visualizations (like the multi-trend line chart in `ReliabilityChart.tsx`) without relying on a heavy charting library required carefully calculating SVG `path` coordinates and preserving aspect ratios. We learned how to effectively use pure CSS and inline SVGs to maintain a lean, highly-performant bundle size while still delivering a sophisticated, custom aesthetic.
+Handling dynamic tool mocking for imported agents required dynamically constructing fake tool handlers (`mock_handlers` in `main.py`) based on schemas exposed by arbitrary `agent.py` adapters. This ensured the SandboxExecutor could run full execution traces without real-world side-effects while still testing the agent's logic flow.
 
 ## What's Next
-- Connect the frontend views to a live backend API for real-time agent telemetry and logging.
-- Implement a global state management solution (e.g., Zustand or React Context) to share evaluation data dynamically across views.
-- Build out the empty `TraceCanvas` component into an interactive node-graph visualization for debugging execution traces.
+- Implement WebSocket streaming to broadcast execution traces from LangGraph live to the React frontend.
+- Expand support for additional LLM evaluator backends beyond Gemini.
+- Add customizable vulnerability templates to the `ScenarioGenerator` for domain-specific adversarial testing.
 
 ## Team
 <!-- TODO: add team members -->
